@@ -28,7 +28,7 @@ Extracts and cleans text from a Wikipedia Cirrus dump and stores output in a
 number of files of similar size in a given directory.
 Each file will contain several documents in the format:
 
-	<doc id="" url="" title="" language="" revision="">
+    <doc id="" url="" title="" language="" revision="">
         ...
         </doc>
 
@@ -44,8 +44,6 @@ import logging
 
 # Program version
 version = '1.00'
-
-urlbase = 'http://it.wikipedia.org/'
 
 # ----------------------------------------------------------------------
 
@@ -71,8 +69,8 @@ class NextFile(object):
         return self._filepath()
 
     def _dirname(self):
-        char1 = self.dir_index % 26
-        char2 = self.dir_index / 26 % 26
+        char1 = int(self.dir_index % 26)
+        char2 = int(self.dir_index / 26 % 26)
         return os.path.join(self.path_name, '%c%c' % (ord('A') + char2, ord('A') + char1))
 
     def _filepath(self):
@@ -109,9 +107,9 @@ class OutputSplitter(object):
 
     def open(self, filename):
         if self.compress:
-            return bz2.BZ2File(filename + '.bz2', 'w')
+            return bz2.BZ2File(filename + '.bz2', 'wb')
         else:
-            return open(filename, 'w')
+            return open(filename, 'wb')
 
 # ----------------------------------------------------------------------
 
@@ -136,7 +134,7 @@ class Extractor(object):
             out.write('\n')
         out.write(footer)
 
-def process_dump(input_file, out_file, file_size, file_compress):
+def process_dump(input_file, out_file, file_size, file_compress, url_base):
     """
     :param input_file: name of the wikipedia dump file; '-' to read from stdin
     :param out_file: directory where to store extracted data, or '-' for stdout
@@ -177,7 +175,7 @@ def process_dump(input_file, out_file, file_size, file_compress):
             # drop references:
             # ^ The Penguin Dictionary
             text = re.sub(r'  \^ .*', '', text)
-            url = urlbase + 'wiki?curid=' + id
+            url = url_base + 'wiki?curid=' + id
             header = '<doc id="%s" url="%s" title="%s" language="%s" revision="%s">\n' % (id, url, title, language, revision)
             page = header + title + '\n\n' + text + '\n</doc>\n'
             output.write(page.encode('utf-8'))
@@ -212,6 +210,8 @@ def main():
     groupS.add_argument("-v", "--version", action="version",
                         version='%(prog)s ' + version,
                         help="print program version")
+    groupS.add_argument("-u", "--url-base", default="http://de.wikipedia.org/",
+                        help="URL base for extracted articles")
 
     args = parser.parse_args()
 
@@ -241,7 +241,9 @@ def main():
             logging.error('Could not create: %s', output_path)
             return
 
-    process_dump(input_file, output_path, file_size, args.compress)
+    url_base = args.url_base
+
+    process_dump(input_file, output_path, file_size, args.compress, url_base)
 
 
 if __name__ == '__main__':
