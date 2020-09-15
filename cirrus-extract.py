@@ -42,6 +42,8 @@ import bz2
 import gzip
 import logging
 
+import mwparserfromhell
+
 # Program version
 version = '1.00'
 
@@ -134,6 +136,21 @@ class Extractor(object):
             out.write('\n')
         out.write(footer)
 
+# TODO: cleaning functions for languages other than german
+def clean_raw_text(text: str) -> str:
+    stripped = mwparserfromhell.parse(text).strip_code()
+    # removing images
+    stripped = re.sub(r'\S+\|.*', '', stripped)
+    # removing section titles and other markup (apart from sources)
+    stripped = re.sub(r'\n (?!(Weblinks|Einzelnachweise)).*', '', stripped)
+    # create a single line of text
+    stripped = stripped.replace('\n', ' ')
+    stripped = re.sub(r' +', ' ', stripped)
+    # remove unwanted parts at the end of articles
+    stripped = re.sub(r'(Weblinks|Einzelnachweise|Kategorie:).*$', '', stripped)
+    return stripped
+
+
 def process_dump(input_file, out_file, file_size, file_compress, url_base):
     """
     :param input_file: name of the wikipedia dump file; '-' to read from stdin
@@ -171,13 +188,12 @@ def process_dump(input_file, out_file, file_size, file_compress, url_base):
         revision = content['version']
         if type == 'page' and content['namespace'] == 0:
             title = content['title']
-            text = content['text']
-            # drop references:
-            # ^ The Penguin Dictionary
-            text = re.sub(r'  \^ .*', '', text)
+            # removing in-text references
+            no_ref = re.sub(r'<ref[^<]*?</ref>', '', content['source_text'])
+            text = clean_raw_text(no_ref).strip()
             url = url_base + 'wiki?curid=' + id
             header = '<doc id="%s" url="%s" title="%s" language="%s" revision="%s">\n' % (id, url, title, language, revision)
-            page = header + title + '\n\n' + text + '\n</doc>\n'
+            page = header + text + '\n</doc>\n'
             output.write(page.encode('utf-8'))
 
 # ----------------------------------------------------------------------
