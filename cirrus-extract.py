@@ -193,7 +193,10 @@ def process_dump(input_file, out_file, file_size, file_compress, url_base):
             text = content['text']
             # drop unwanted content at end of article
             # substitutes everything after the last occurence of delete_after
-            text = re.sub(fr'({re.escape(delete_after)})(?!.*\1).*', delete_after, text)
+            try:
+                text = re.sub(fr'({re.escape(delete_after)})(?!.*\1).*', delete_after, text)
+            except re.error:
+                pass
             # drop references:
             # ^ The Penguin Dictionary
             text = re.sub(r'  \^ .*', '', text)
