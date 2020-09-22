@@ -42,6 +42,8 @@ import bz2
 import gzip
 import logging
 
+import mwparserfromhell
+
 # Program version
 version = '1.00'
 
@@ -134,6 +136,46 @@ class Extractor(object):
             out.write('\n')
         out.write(footer)
 
+def strip_equations(text: str) -> str:
+    stripped = []
+    in_equation = False
+    skip_next = False
+    equation_markers = ['\\displaystyle']
+    for i, char in enumerate(text):
+        if skip_next:
+            skip_next = False
+            continue
+        if char == '{' and not in_equation:
+            for marker in equation_markers:
+                if text[i+1:i+len(marker)+1] == marker:
+                    braces_counter = 1
+                    in_equation = True
+                    break
+        elif char == '{' and in_equation:
+            braces_counter += 1
+        elif char == '}' and in_equation:
+            braces_counter -= 1
+        if not in_equation:
+            stripped.append(char)
+        if in_equation and braces_counter == 0:
+            in_equation = False
+            skip_next = True
+    return ''.join(stripped)
+
+# TODO: cleaning functions for languages other than german
+def get_end_of_cleaned(text: str) -> str:
+    stripped = mwparserfromhell.parse(text).strip_code()
+    # remove images
+    stripped = re.sub(r'\S+\|.*', '', stripped)
+    # remove section titles and other markup (apart from sources)
+    stripped = re.sub(r'\n (?!(Weblinks|Einzelnachweise)).*', '', stripped)
+    # create a single line of text
+    stripped = stripped.replace('\n', ' ')
+    stripped = re.sub(r' +', ' ', stripped)
+    # remove unwanted parts at the end of articles
+    stripped = re.sub(r'(Weblinks|Einzelnachweise|Kategorie:).*$', '', stripped)
+    return stripped[-50:]
+
 def process_dump(input_file, out_file, file_size, file_compress, url_base):
     """
     :param input_file: name of the wikipedia dump file; '-' to read from stdin
@@ -171,13 +213,24 @@ def process_dump(input_file, out_file, file_size, file_compress, url_base):
         revision = content['version']
         if type == 'page' and content['namespace'] == 0:
             title = content['title']
+            # removing in-text references in the source text
+            source_text = re.sub(r'<ref[^<]*?</ref>', '', content['source_text'])
+            delete_after = get_end_of_cleaned(source_text)
             text = content['text']
+            # drop unwanted content at end of article
+            # substitutes everything after the last occurence of delete_after
+            try:
+                text = re.sub(fr'({re.escape(delete_after)})(?!.*\1).*', delete_after, text)
+            except re.error:
+                pass
             # drop references:
             # ^ The Penguin Dictionary
             text = re.sub(r'  \^ .*', '', text)
+            # drop equations
+            text = strip_equations(text)
             url = url_base + 'wiki?curid=' + id
             header = '<doc id="%s" url="%s" title="%s" language="%s" revision="%s">\n' % (id, url, title, language, revision)
-            page = header + title + '\n\n' + text + '\n</doc>\n'
+            page = header + text + '\n</doc>\n'
             output.write(page.encode('utf-8'))
 
 # ----------------------------------------------------------------------
